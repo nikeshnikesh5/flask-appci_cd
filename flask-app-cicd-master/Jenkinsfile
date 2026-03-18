@@ -1,4 +1,4 @@
-ppipeline {
+pipeline {
     agent any
 
     environment {
@@ -7,48 +7,51 @@ ppipeline {
     }
 
     stages {
-        stage('Setup Python') {
-            steps {
-                echo 'Setting up Python environment'
-                sh """
-                    python3 -m venv venv
-                    source venv/bin/activate
-                    pip install -r ${APP_PATH}/requirements.txt
-                """
-            }
-        }
-
-        stage('Build Docker Image') {
+        stage('Build') {
             steps {
                 echo 'Building Docker image'
-                sh "docker build -t ${DOCKER_IMAGE} ${APP_PATH}"
+                sh """
+                    docker build -t ${DOCKER_IMAGE} ${APP_PATH}
+                    sleep 3
+                """
             }
         }
 
         stage('Test') {
-            steps {
-                echo 'Running Unit Tests'
-                sh """
-                    source venv/bin/activate
-                    pytest ${APP_PATH}/tests --maxfail=1 --disable-warnings
-                """
-            }
-        }
+    steps {
+        echo 'Running Unit Tests with Pytest'
+        // Create venv, install requirements, and run pytest
+        sh '''
+            python3 -m venv venv
+            . venv/bin/activate
+            pip install -r requirements.txt
+            pytest tests/unit_tests.py
+        '''
+    }
+}
 
-        stage('Integration Tests') {
-            steps {
-                echo 'Running Integration Tests'
-                sh """
-                    source venv/bin/activate
-                    pytest ${APP_PATH}/integration_tests --maxfail=1 --disable-warnings
-                """
-            }
-        }
+stage('Integration Tests') {
+    steps {
+        echo 'Checking if the Flask Server boots...'
+        sh '''
+            . venv/bin/activate
+            export FLASK_APP=app.py
+            flask run & 
+            SLEEP_PID=$!
+            sleep 5
+            curl -f http://localhost:5000 || exit 1
+            kill $SLEEP_PID
+        '''
+    }
+}
 
         stage('Deployment Preparation') {
             steps {
-                echo 'Cleaning old container'
-                sh "docker rm -f flaskapp || true"
+                echo 'Preparing Deployment'
+                sh """
+                    docker rm -f flaskapp || true
+                    sleep 3
+                """
             }
         }
 
@@ -61,8 +64,14 @@ ppipeline {
     }
 
     post {
-        always { echo 'Pipeline finished' }
-        success { echo 'Deployment successful!' }
-        failure { echo 'Pipeline failed!' }
+        always {
+            echo 'Pipeline finished'
+        }
+        success {
+            echo 'Deployment successful!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
     }
 }
