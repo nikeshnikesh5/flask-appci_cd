@@ -1,4 +1,4 @@
-pipeline {
+ppipeline {
     agent any
 
     environment {
@@ -7,37 +7,48 @@ pipeline {
     }
 
     stages {
-        stage('Build') {
+        stage('Setup Python') {
+            steps {
+                echo 'Setting up Python environment'
+                sh """
+                    python3 -m venv venv
+                    source venv/bin/activate
+                    pip install -r ${APP_PATH}/requirements.txt
+                """
+            }
+        }
+
+        stage('Build Docker Image') {
             steps {
                 echo 'Building Docker image'
-                sh """
-                    docker build -t ${DOCKER_IMAGE} ${APP_PATH}
-                    sleep 3
-                """
+                sh "docker build -t ${DOCKER_IMAGE} ${APP_PATH}"
             }
         }
 
         stage('Test') {
             steps {
                 echo 'Running Unit Tests'
-                sh 'sleep 3' // Replace with pytest or your test commands
+                sh """
+                    source venv/bin/activate
+                    pytest ${APP_PATH}/tests --maxfail=1 --disable-warnings
+                """
             }
         }
 
         stage('Integration Tests') {
             steps {
                 echo 'Running Integration Tests'
-                sh 'sleep 3' // Replace with actual integration tests
+                sh """
+                    source venv/bin/activate
+                    pytest ${APP_PATH}/integration_tests --maxfail=1 --disable-warnings
+                """
             }
         }
 
         stage('Deployment Preparation') {
             steps {
-                echo 'Preparing Deployment'
-                sh """
-                    docker rm -f flaskapp || true
-                    sleep 3
-                """
+                echo 'Cleaning old container'
+                sh "docker rm -f flaskapp || true"
             }
         }
 
@@ -50,14 +61,8 @@ pipeline {
     }
 
     post {
-        always {
-            echo 'Pipeline finished'
-        }
-        success {
-            echo 'Deployment successful!'
-        }
-        failure {
-            echo 'Pipeline failed!'
-        }
+        always { echo 'Pipeline finished' }
+        success { echo 'Deployment successful!' }
+        failure { echo 'Pipeline failed!' }
     }
 }
